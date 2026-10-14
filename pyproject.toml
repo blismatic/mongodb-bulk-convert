@@ -1,0 +1,10 @@
+[project]
+name = "mongodb-bulk-convert"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "httpx2>=2.13.1",
+    "pymongo>=4.19.0",
+]

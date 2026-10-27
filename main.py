@@ -30,6 +30,8 @@ def transform(doc):
         last.pop(field, None)
 
     response = http().post(REVERSE_API_URL, json=last["data"])
+    if response.status_code == 400:
+        return None  # rejected by the API; skipped by design
     if response.status_code != 200:
         raise RuntimeError(f"reverse failed for {doc['_id']}: {response.status_code} {response.text}")
     last["data"] = response.json()
@@ -40,10 +42,14 @@ def transform(doc):
 
 
 def process(doc):
+    out = transform(doc)
+    if out is None:
+        return "skipped"
     try:
-        destination_collection.insert_one(transform(doc))
+        destination_collection.insert_one(out)
     except DuplicateKeyError:
         pass  # trigger already wrote this document, and its version is newer, so just skip
+    return "written"
 
 
 def main():
@@ -54,6 +60,7 @@ def main():
     cursor = source_collection.find({}, {"catalog": 1, "record_id": 1, "timeline": {"$slice": -1}}, batch_size=BATCH)
 
     processed = 0
+    skipped = 0
     batch = []
     with ThreadPoolExecutor(max_workers=WORKERS) as pool:
         for doc in cursor:
@@ -61,15 +68,18 @@ def main():
                 continue
             batch.append(doc)
             if len(batch) == BATCH:
-                list(pool.map(process, batch))  # surfaces the first failure after this batch completes
+                results = list(pool.map(process, batch))  # surfaces the first failure after this batch completes
+                skipped += results.count("skipped")
                 processed += len(batch)
                 print(f"Processed {processed} documents")
                 batch = []
         if batch:
-            list(pool.map(process, batch))
+            results = list(pool.map(process, batch))
+            skipped += results.count("skipped")
             processed += len(batch)
 
     print(f"Done! Proceesed {processed} documents in total.")
+    print(f"Skipped {skipped} documents.")
 
 
 if __name__ == "__main__":

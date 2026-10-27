@@ -10,7 +10,9 @@ REVERSE_API_URL = os.getenv("API_URL", "")
 WORKERS = 10  # concurrent API calls; raise only if the API can handle it
 BATCH = 1000
 
-client = MongoClient(f"mongodb+srv://{os.getenv('USER', '')}:{os.getenv('PASSWORD', '')}@{os.getenv('CLUSTER', '')}/?retryWrites=true&w=majority")
+client = MongoClient(
+    f"mongodb+srv://{os.getenv('MONGO_USER', '')}:{os.getenv('MONGO_PASSWORD', '')}@{os.getenv('MONGO_CLUSTER', '')}/?retryWrites=true&w=majority"
+)
 db = client[os.getenv("DATABASE", "")]
 source_collection = db[os.getenv("SOURCE_COLLECTION", "")]
 destination_collection = db[os.getenv("DESTINATION_COLLECTION", "")]
@@ -28,6 +30,9 @@ def transform(doc):
     last = doc["timeline"][0]
     for field in ("status", "apps", "responsible_app"):
         last.pop(field, None)
+
+    if "data" not in last:
+        return None  # no data to translate; skipped by design. Not sure how this happens but it occurs sometimes in MongoDB
 
     response = http().post(REVERSE_API_URL, json=last["data"])
     if response.status_code == 400:
@@ -78,7 +83,7 @@ def main():
             skipped += results.count("skipped")
             processed += len(batch)
 
-    print(f"Done! Proceesed {processed} documents in total.")
+    print(f"Done! Processed {processed} documents in total.")
     print(f"Skipped {skipped} documents.")
 
 
